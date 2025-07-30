@@ -1,4 +1,4 @@
-name: robodiff-lh
+name: vdp
 channels:
   - pytorch
   - pytorch3d

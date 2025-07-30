@@ -31,6 +31,8 @@ from diffusion_policy.model.common.lr_scheduler import get_scheduler
 from hsic import batch_hsic
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
+os.environ["WANDB_MODE"] = "offline"  # disable wandb online mode
+
 class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
     include_keys = ['global_step', 'epoch']
 
@@ -147,7 +149,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         if self.ema_model is not None:
             self.ema_model.to(device)
         optimizer_to(self.optimizer, device)
-        
+
         # save batch for sampling
         train_sampling_batch = None
 
@@ -159,14 +161,14 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 step_log = dict()
                 # ========= train for this epoch ==========
                 train_losses = list()
-                with tqdm.tqdm(train_dataloader, desc=f"Training epoch {self.epoch}", 
+                with tqdm.tqdm(train_dataloader, desc=f"Training epoch {self.epoch}",
                         leave=False, mininterval=cfg.training.tqdm_interval_sec) as tepoch:
                     for batch_idx, batch in enumerate(tepoch):
                         # device transfer
                         batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
                         if train_sampling_batch is None:
                             train_sampling_batch = batch
-                        
+
                         # compute loss
                         raw_loss = self.model.compute_loss(batch, debug)
                         debug = False
@@ -178,7 +180,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                             self.optimizer.step()
                             self.optimizer.zero_grad()
                             lr_scheduler.step()
-                        
+
                         # update ema
                         if cfg.training.use_ema:
                             ema.step(self.model)
@@ -226,7 +228,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 if (self.epoch % cfg.training.val_every) == 0:
                     with torch.no_grad():
                         val_losses = list()
-                        with tqdm.tqdm(val_dataloader, desc=f"Validation epoch {self.epoch}", 
+                        with tqdm.tqdm(val_dataloader, desc=f"Validation epoch {self.epoch}",
                                 leave=False, mininterval=cfg.training.tqdm_interval_sec) as tepoch:
                             for batch_idx, batch in enumerate(tepoch):
                                 batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
@@ -247,10 +249,10 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                         batch = dict_apply(train_sampling_batch, lambda x: x.to(device, non_blocking=True))
                         obs_dict = batch['obs']
                         gt_action = batch['action']
-                        
+
                         result = policy.predict_action(obs_dict)
                         pred_action = result['action_pred']
-                        
+
                         if not policy.past_action_pred:
                             pred_action = pred_action[:, policy.n_obs_steps - 1:]
                             gt_action = gt_action[:, policy.n_obs_steps - 1:]
@@ -258,14 +260,14 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                         step_log["hsic_action_pred_offline"] = batch_hsic(pred_action).mean()
                         mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                         step_log['train_action_mse_error'] = mse.item()
-                        
+
                         del batch
                         del obs_dict
                         del gt_action
                         del result
                         del pred_action
                         del mse
-                
+
                 # checkpoint
                 if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0:
                     # checkpointing
@@ -279,7 +281,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                     for key, value in step_log.items():
                         new_key = key.replace('/', '_')
                         metric_dict[new_key] = value
-                    
+
                     # We can't copy the last checkpoint here
                     # since save_checkpoint uses threads.
                     # therefore at this point the file might have been empty!
@@ -299,7 +301,7 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
 
 @hydra.main(
     version_base=None,
-    config_path=str(pathlib.Path(__file__).parent.parent.joinpath("config")), 
+    config_path=str(pathlib.Path(__file__).parent.parent.joinpath("config")),
     config_name=pathlib.Path(__file__).stem)
 def main(cfg):
     workspace = TrainDiffusionTransformerHybridWorkspace(cfg)

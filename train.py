@@ -4,6 +4,13 @@ Training:
 python train.py --config-name=train_diffusion_lowdim_workspace
 """
 
+import os
+os.environ["WANDB_MODE"] = "offline"  # disable wandb online mode
+os.environ["WANDB_API_KEY"] = "dummy"
+
+import swanlab
+swanlab.sync_wandb()
+
 import sys
 # use line-buffering for both stdout and stderr
 sys.stdout = open(sys.stdout.fileno(), mode='w', buffering=1)
@@ -28,6 +35,7 @@ def main(cfg: OmegaConf):
     OmegaConf.resolve(cfg)
     print(OmegaConf.to_yaml(cfg))
     cls = hydra.utils.get_class(cfg._target_)
+    os.environ["WANDB_MODE"] = "offline"  # disable wandb online mode
     workspace: BaseWorkspace = cls(cfg)
     workspace.run()
 

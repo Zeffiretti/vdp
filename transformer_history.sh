@@ -133,7 +133,7 @@ if [ "$emb" = "true" ]; then
     CONFIG="${CONFIG}_emb"
 fi
 hhmmss=$(date +%H%M%S)
-hydra_command="hydra.run.dir=\"data/outputs/transptp-${past_action_pred}_s${past_steps_reg}_o${global_obs}_a${global_action}_${config_choice}_${hhmmss}_${emb}\""	
+hydra_command="hydra.run.dir=\"data/outputs/transptp-${past_action_pred}_s${past_steps_reg}_o${global_obs}_a${global_action}_${config_choice}_${hhmmss}_${emb}\""
 
 echo $CONFIG
 # Get the current time in HHMMSS format
@@ -145,7 +145,7 @@ pred_type="epsilon" # change if you want to test different targets
 
 # Change training.debug if you want to test
 # Construct and execute the command
-python train.py \
+WANDB_DISABLED=true python train.py \
 	--config-dir="${CONFIG_DIR}" \
 	--config-name="${CONFIG}" \
 	training.seed=42 \
