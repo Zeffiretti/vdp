@@ -157,6 +157,6 @@ WANDB_DISABLED=true python train.py \
 	global_horizon=${global_horizon} \
 	policy.past_action_pred=${past_action_pred} \
 	policy.past_steps_reg=${past_steps_reg} \
-	training.debug=true \
+	training.debug=false \
 	logging.name="transptp-${past_action_pred}_s${past_steps_reg}_o${global_obs}_a${global_action}_${config_choice}_${hhmmss}_${emb}" \
 	${extra_command}
