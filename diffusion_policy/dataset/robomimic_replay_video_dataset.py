@@ -15,7 +15,7 @@ import concurrent.futures
 import multiprocessing
 from omegaconf import OmegaConf
 from diffusion_policy.common.pytorch_util import dict_apply
-from diffusion_policy.dataset.base_dataset import BaseImageDataset, LinearNormalizer
+from diffusion_policy.dataset.base_dataset import BaseImageDataset, LinearNormalizer, BaseVideoDataset
 from diffusion_policy.model.common.normalizer import LinearNormalizer, SingleFieldLinearNormalizer
 from diffusion_policy.model.common.rotation_transformer import RotationTransformer
 from diffusion_policy.codecs.imagecodecs_numcodecs import register_codecs, Jpeg2k
@@ -32,11 +32,12 @@ from diffusion_policy.common.normalize_util import (
 )
 from math import ceil, floor
 from mlp_correlation import batch_mlp_corr
+import numcodecs
 
 register_codecs()
 
 
-class RobomimicReplayImageDataset(BaseImageDataset):
+class RobomimicReplayVideoDataset(BaseVideoDataset):
     def __init__(
         self,
         shape_meta: dict,
@@ -100,7 +101,7 @@ class RobomimicReplayImageDataset(BaseImageDataset):
                         shutil.rmtree(cache_zarr_path)
                         raise e
                 else:
-                    print("Loading cached ReplayBuffer from Disk.")
+                    print("[Video] Loading cached ReplayBuffer from Disk.")
                     with zarr.ZipStore(cache_zarr_path, mode="r") as zip_store:
                         replay_buffer = ReplayBuffer.copy_from_store(src_store=zip_store, store=zarr.MemoryStore())
                     print("Loaded!")
@@ -267,12 +268,23 @@ class RobomimicReplayImageDataset(BaseImageDataset):
 
             # past_data = past_data[self.subsample_frames-1::self.subsample_frames]
             comb_data = past_data
-            obs_dict[key] = (
-                self.image_transforms(torch.from_numpy(np.moveaxis(comb_data[T_slice], -1, 1)).type(torch.uint8)).type(
-                    torch.float32
-                )
-                / 255.0
-            ).numpy()
+            # obs_dict[key] = (
+            #     self.image_transforms(torch.from_numpy(np.moveaxis(comb_data[T_slice], -1, 1)).type(torch.uint8)).type(
+            #         torch.float32
+            #     )
+            #     / 255.0
+            # ).numpy()
+            comb_data = np.moveaxis(comb_data, 0, 1)  # T,C,H,W
+            key_data = np.stack(
+                [
+                    self.image_transforms(torch.from_numpy(np.moveaxis(frame[T_slice], -1, 1)).type(torch.uint8)).type(
+                        torch.float32
+                    )
+                    / 255.0
+                    for frame in comb_data
+                ]
+            )
+            obs_dict[key] = np.moveaxis(key_data, 0, 1)
             # T,C,H,W
             del data[key]
         for key in lowdim_keys:
@@ -326,7 +338,14 @@ def _convert_actions(raw_actions, abs_action, rotation_transformer):
 
 
 def _convert_robomimic_to_replay(
-    store, shape_meta, dataset_path, abs_action, rotation_transformer, n_workers=None, max_inflight_tasks=None
+    store,
+    shape_meta,
+    dataset_path,
+    abs_action,
+    rotation_transformer,
+    n_workers=None,
+    max_inflight_tasks=None,
+    n_frames=16,
 ):
     if n_workers is None:
         n_workers = multiprocessing.cpu_count()
@@ -369,7 +388,7 @@ def _convert_robomimic_to_replay(
         episode_starts = [0] + episode_ends[:-1]
         _ = meta_group.array("episode_ends", episode_ends, dtype=np.int64, compressor=None, overwrite=True)
         # save lowdim data
-        for key in tqdm(lowdim_keys + ["action"], desc="Loading lowdim data"):
+        for key in tqdm(lowdim_keys + ["action"], desc="[Video] Loading lowdim data"):
             data_key = "obs/" + key
             if key == "action":
                 data_key = act_key
@@ -400,14 +419,23 @@ def _convert_robomimic_to_replay(
 
         def img_copy(zarr_arr, zarr_idx, hdf5_arr, hdf5_idx):
             try:
-                zarr_arr[zarr_idx] = hdf5_arr[hdf5_idx]
-                # make sure we can successfully decode
-                _ = zarr_arr[zarr_idx]
+                if hdf5_idx + 1 >= n_frames:
+                    start = hdf5_idx - n_frames + 1
+                    end = hdf5_idx + 1
+                    zarr_arr[zarr_idx] = hdf5_arr[start:end]
+                else:
+                    # return True
+                    pad_len = n_frames - (hdf5_idx + 1)
+                    # temp = np.zeros((n_frames, *hdf5_arr.shape[1:]), dtype=hdf5_arr.dtype)
+                    # temp[pad_len:] = hdf5_arr[0 : hdf5_idx + 1]
+                    zarr_arr[zarr_idx, pad_len:] = hdf5_arr[0 : hdf5_idx + 1]
+
+                _ = zarr_arr[zarr_idx]  # 确保写入无误
                 return True
             except Exception as e:
                 return False
 
-        with tqdm(total=n_steps * len(rgb_keys), desc="Loading image data", mininterval=1.0) as pbar:
+        with tqdm(total=n_steps * len(rgb_keys), desc="[Video] Loading video data", mininterval=1.0) as pbar:
             # one chunk per thread, therefore no synchronization needed
             with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
                 futures = set()
@@ -415,15 +443,15 @@ def _convert_robomimic_to_replay(
                     data_key = "obs/" + key
                     shape = tuple(shape_meta["obs"][key]["shape"])
                     c, h, w = shape
-                    this_compressor = Jpeg2k(level=50)
+                    this_compressor = numcodecs.Blosc(cname="zstd", clevel=5, shuffle=1)
                     img_arr = data_group.require_dataset(
                         name=key,
-                        shape=(n_steps, h, w, c),
-                        chunks=(1, h, w, c),
+                        shape=(n_steps, n_frames, h, w, c),
+                        chunks=(1, n_frames, h, w, c),
                         compressor=this_compressor,
                         dtype=np.uint8,
                     )
-                    for episode_idx in range(len(demos)):
+                    for episode_idx in range(len(demos) // 100):
                         demo = demos[f"demo_{episode_idx}"]
                         hdf5_arr = demo["obs"][key]  # [:,0]
                         for hdf5_idx in range(hdf5_arr.shape[0]):

@@ -145,6 +145,23 @@ pred_type="epsilon" # change if you want to test different targets
 
 # Change training.debug if you want to test
 # Construct and execute the command
+echo "============================================================"
+echo "Parameters:"
+echo "--config-dir=${CONFIG_DIR}"
+echo "--config-name=${CONFIG}"
+echo "training.seed=42"
+echo "policy.noise_scheduler.prediction_type=${pred_type}"
+echo "training.device=cuda:0"
+echo "${hydra_command}"
+echo "global_obs=${global_obs}"
+echo "global_action=${global_action}"
+echo "global_horizon=${global_horizon}"
+echo "policy.past_action_pred=${past_action_pred}"
+echo "policy.past_steps_reg=${past_steps_reg}"
+echo "training.debug=false"
+echo "logging.name=transptp-${past_action_pred}_s${past_steps_reg}_o${global_obs}_a${global_action}_${config_choice}_${hhmmss}_${emb}"
+echo "${extra_command}"
+echo "============================================================"
 WANDB_DISABLED=true python train.py \
 	--config-dir="${CONFIG_DIR}" \
 	--config-name="${CONFIG}" \
@@ -157,6 +174,6 @@ WANDB_DISABLED=true python train.py \
 	global_horizon=${global_horizon} \
 	policy.past_action_pred=${past_action_pred} \
 	policy.past_steps_reg=${past_steps_reg} \
-	training.debug=true \
+	training.debug=false \
 	logging.name="transptp-${past_action_pred}_s${past_steps_reg}_o${global_obs}_a${global_action}_${config_choice}_${hhmmss}_${emb}" \
 	${extra_command}

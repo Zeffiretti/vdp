@@ -63,7 +63,7 @@ past_action_visible: false
 policy:
   _target_: diffusion_policy.policy.diffusion_transformer_hybrid_image_policy.DiffusionTransformerHybridImagePolicy
   causal_attn: true
-  use_embed_if_present: {REMINDER TO INSERT CACHE EMBEDDINGS}
+  use_embed_if_present: true
   obs_encoder_dir: ${obs_encoder_dir}
   obs_encoder_freeze: ${obs_encoder_freeze}
   past_action_pred: true
@@ -151,7 +151,7 @@ task:
   dataset:
     _target_: diffusion_policy.dataset.robomimic_replay_image_dataset.RobomimicReplayImageDataset
     abs_action: true
-    use_embed_if_present: {REMINDER TO INSERT CACHE EMBEDDINGS}
+    use_embed_if_present: true
     dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
     horizon: ${global_horizon}
     n_obs_steps: ${global_obs}
@@ -166,7 +166,7 @@ task:
       obs:
         embedding:
           shape:
-          - 137
+          - 2048
         agentview_image:
           shape:
           - 3

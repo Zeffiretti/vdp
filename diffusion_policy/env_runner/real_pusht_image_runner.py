@@ -5,6 +5,6 @@ class RealPushTImageRunner(BaseImageRunner):
     def __init__(self,
             output_dir):
         super().__init__(output_dir)
-    
+
     def run(self, policy: BaseImagePolicy):
         return dict()
