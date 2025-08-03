@@ -9,10 +9,11 @@ while [[ "$#" -gt 0 ]]; do
         --config_choice) config_choice="$2"; shift ;;
         --past_action_pred) past_action_pred="$2"; shift ;;
         --past_steps_reg) past_steps_reg="$2"; shift ;;
+        --vjepa2) vjepa2="$2"; shift ;;
         --emb) emb="$2"; shift ;;
         --cached) cached="$2"; shift ;;
         -h|--help)
-            echo "Usage: $0 --global_obs N --global_action N --global_horizon N --config_choice NAME --past_action_pred BOOL --past_steps_reg N --emb BOOL --cached BOOL"
+            echo "Usage: $0 --global_obs N --global_action N --global_horizon N --config_choice NAME --past_action_pred BOOL --past_steps_reg N --vjepa2 BOOL --emb BOOL --cached BOOL"
             echo "config_choice: [tool | square | square_past | transport | aloha | ...]"
             exit 0
             ;;
@@ -128,6 +129,9 @@ esac
 
 if [ "$cached" = "true" ]; then
     extra_command="policy.use_embed_if_present=true"
+fi
+if [ "$vjepa2" = "true" ]; then
+    CONFIG="${CONFIG}_vjepa2"
 fi
 if [ "$emb" = "true" ]; then
     CONFIG="${CONFIG}_emb"

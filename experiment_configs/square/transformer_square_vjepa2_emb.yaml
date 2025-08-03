@@ -13,7 +13,7 @@ checkpoint:
   save_last_snapshot: false
   topk:
     format_str: epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt
-    k: 50
+    k: 1
     mode: max
     monitor_key: test_mean_score
 dataloader:
@@ -42,11 +42,11 @@ logging:
   resume: true
   tags:
   - train_diffusion_transformer_hybrid
-  - square_image
+  - square_video
   - default
 multi_run:
   run_dir: data/outputs/
-  wandb_name_base: train_diffusion_transformer_hybrid_square_image
+  wandb_name_base: train_diffusion_transformer_hybrid_square_video
 n_action_steps: ${global_action}
 n_latency_steps: 0
 n_obs_steps: ${global_obs}
@@ -61,7 +61,7 @@ optimizer:
   transformer_weight_decay: 0.001
 past_action_visible: false
 policy:
-  _target_: diffusion_policy.policy.diffusion_transformer_hybrid_image_policy.DiffusionTransformerHybridImagePolicy
+  _target_: diffusion_policy.policy.diffusion_transformer_hybrid_video_policy.DiffusionTransformerHybridVideoPolicy
   causal_attn: true
   use_embed_if_present: true
   obs_encoder_dir: ${obs_encoder_dir}
@@ -149,7 +149,7 @@ shape_meta:
 task:
   abs_action: true
   dataset:
-    _target_: diffusion_policy.dataset.robomimic_replay_image_dataset.RobomimicReplayImageDataset
+    _target_: diffusion_policy.dataset.robomimic_replay_video_dataset.RobomimicReplayVideoDataset
     abs_action: true
     use_embed_if_present: true
     dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
@@ -188,7 +188,7 @@ task:
         robot0_gripper_qpos:
           shape:
           - 2
-    use_cache: false
+    use_cache: true
     val_ratio: 0.02
   dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
   dataset_type: mh
@@ -275,9 +275,9 @@ training:
   lr_warmup_steps: 1000
   max_train_steps: null
   max_val_steps: null
-  num_epochs: 3500
+  num_epochs: 500
   resume: true
-  rollout_every: 100
+  rollout_every: 1
   sample_every: 5
   seed: 42
   tqdm_interval_sec: 1.0

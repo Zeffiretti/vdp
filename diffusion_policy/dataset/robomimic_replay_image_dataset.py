@@ -376,7 +376,7 @@ def _convert_robomimic_to_replay(
             this_data = list()
             for i in range(len(demos)):
                 demo = demos[f"demo_{i}"]
-                print("observations present", demo["obs"].keys())
+                # print("observations present", demo["obs"].keys())
                 this_data.append(demo[data_key][:].astype(np.float32))
             this_data = np.concatenate(this_data, axis=0)
             if key == "action":

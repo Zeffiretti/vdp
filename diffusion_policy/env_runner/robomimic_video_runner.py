@@ -42,7 +42,7 @@ def create_env(env_meta, shape_meta, enable_render=True):
     return env
 
 
-class RobomimicImageRunner(BaseImageRunner):
+class RobomimicVideoRunner(BaseImageRunner):
     """
     Robomimic envs already enforces number of steps.
     """

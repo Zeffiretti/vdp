@@ -20,10 +20,9 @@ import tqdm
 import numpy as np
 import shutil
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from diffusion_policy.policy.diffusion_transformer_hybrid_image_policy import (
-    DiffusionTransformerHybridImagePolicy,
-)
-from diffusion_policy.dataset.base_dataset import BaseImageDataset
+from diffusion_policy.policy.diffusion_transformer_hybrid_image_policy import DiffusionTransformerHybridImagePolicy
+from diffusion_policy.policy.diffusion_transformer_hybrid_video_policy import DiffusionTransformerHybridVideoPolicy
+from diffusion_policy.dataset.base_dataset import BaseImageDataset, BaseVideoDataset
 from diffusion_policy.env_runner.base_image_runner import BaseImageRunner
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
@@ -50,9 +49,11 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
         random.seed(seed)
 
         # configure model
-        self.model: DiffusionTransformerHybridImagePolicy = hydra.utils.instantiate(cfg.policy)
+        self.model: DiffusionTransformerHybridImagePolicy | DiffusionTransformerHybridVideoPolicy = (
+            hydra.utils.instantiate(cfg.policy)
+        )
 
-        self.ema_model: DiffusionTransformerHybridImagePolicy = None
+        self.ema_model: DiffusionTransformerHybridImagePolicy | DiffusionTransformerHybridVideoPolicy = None
         if cfg.training.use_ema:
             self.ema_model = copy.deepcopy(self.model)
 
@@ -74,10 +75,10 @@ class TrainDiffusionTransformerHybridWorkspace(BaseWorkspace):
                 self.load_checkpoint(path=lastest_ckpt_path)
 
         # configure dataset
-        dataset: BaseImageDataset
-        cfg.task.dataset.shape_meta.obs.embedding.shape = [2048]
+        dataset: BaseImageDataset | BaseVideoDataset
+        # cfg.task.dataset.shape_meta.obs.embedding.shape = [2048]
         dataset = hydra.utils.instantiate(cfg.task.dataset)
-        assert isinstance(dataset, BaseImageDataset)
+        assert isinstance(dataset, BaseImageDataset) or isinstance(dataset, BaseVideoDataset)
         dataset.__getitem__(0)
         train_dataloader = DataLoader(dataset, **cfg.dataloader)
         normalizer = dataset.get_normalizer()
