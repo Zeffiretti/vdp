@@ -267,7 +267,7 @@ task:
   task_name: square
 task_name: square_image
 training:
-  checkpoint_every: 10
+  checkpoint_every: 100
   debug: false
   device: cuda:0
   gradient_accumulate_every: 1
@@ -277,7 +277,7 @@ training:
   max_val_steps: null
   num_epochs: 500
   resume: true
-  rollout_every: 10
+  rollout_every: 100
   sample_every: 5
   seed: 42
   tqdm_interval_sec: 1.0

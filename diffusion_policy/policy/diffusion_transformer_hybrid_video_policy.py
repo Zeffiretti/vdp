@@ -585,7 +585,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
                 x = self.obs_encoder(x)[:, 0]
 
             # flatten to [B, D]
-            x = x.reshape(10, -1)
+            x = x.reshape(x.shape[0], -1)
             feats.append(x)
 
         return torch.cat(feats, dim=-1)
