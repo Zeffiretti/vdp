@@ -451,7 +451,7 @@ def _convert_robomimic_to_replay(
                         compressor=this_compressor,
                         dtype=np.uint8,
                     )
-                    for episode_idx in range(len(demos) // 100):
+                    for episode_idx in range(len(demos)):
                         demo = demos[f"demo_{episode_idx}"]
                         hdf5_arr = demo["obs"][key]  # [:,0]
                         for hdf5_idx in range(hdf5_arr.shape[0]):

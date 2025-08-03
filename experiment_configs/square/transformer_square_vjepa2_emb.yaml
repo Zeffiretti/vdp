@@ -41,9 +41,9 @@ logging:
   project: diffusion_pickandplace_real
   resume: true
   tags:
-  - train_diffusion_transformer_hybrid
-  - square_video
-  - default
+    - train_diffusion_transformer_hybrid
+    - square_video
+    - default
 multi_run:
   run_dir: data/outputs/
   wandb_name_base: train_diffusion_transformer_hybrid_square_video
@@ -54,8 +54,8 @@ name: train_diffusion_transformer_hybrid
 obs_as_cond: true
 optimizer:
   betas:
-  - 0.9
-  - 0.95
+    - 0.9
+    - 0.95
   learning_rate: 0.0001
   obs_encoder_weight_decay: 1.0e-06
   transformer_weight_decay: 0.001
@@ -69,8 +69,8 @@ policy:
   past_action_pred: true
   past_steps_reg: -1
   crop_shape:
-  - 76
-  - 76
+    - 76
+    - 76
   eval_fixed_crop: true
   horizon: ${global_horizon}
   n_action_steps: ${global_action}
@@ -96,56 +96,56 @@ policy:
   shape_meta:
     action:
       shape:
-      - 10
+        - 10
     obs:
       agentview_image:
         shape:
-        - 3
-        - 84
-        - 84
+          - 3
+          - 84
+          - 84
         type: rgb
       robot0_eef_pos:
         shape:
-        - 3
+          - 3
       robot0_eef_quat:
         shape:
-        - 4
+          - 4
       robot0_eye_in_hand_image:
         shape:
-        - 3
-        - 84
-        - 84
+          - 3
+          - 84
+          - 84
         type: rgb
       robot0_gripper_qpos:
         shape:
-        - 2
+          - 2
   time_as_cond: true
 shape_meta:
   action:
     shape:
-    - 10
+      - 10
   obs:
     agentview_image:
       shape:
-      - 3
-      - 84
-      - 84
+        - 3
+        - 84
+        - 84
       type: rgb
     robot0_eef_pos:
       shape:
-      - 3
+        - 3
     robot0_eef_quat:
       shape:
-      - 4
+        - 4
     robot0_eye_in_hand_image:
       shape:
-      - 3
-      - 84
-      - 84
+        - 3
+        - 84
+        - 84
       type: rgb
     robot0_gripper_qpos:
       shape:
-      - 2
+        - 2
 task:
   abs_action: true
   dataset:
@@ -162,32 +162,32 @@ task:
     shape_meta:
       action:
         shape:
-        - 10
+          - 10
       obs:
         embedding:
           shape:
-          - 2048
+            - 2192
         agentview_image:
           shape:
-          - 3
-          - 84
-          - 84
+            - 3
+            - 84
+            - 84
           type: rgb
         robot0_eef_pos:
           shape:
-          - 3
+            - 3
         robot0_eef_quat:
           shape:
-          - 4
+            - 4
         robot0_eye_in_hand_image:
           shape:
-          - 3
-          - 84
-          - 84
+            - 3
+            - 84
+            - 84
           type: rgb
         robot0_gripper_qpos:
           shape:
-          - 2
+            - 2
     use_cache: true
     val_ratio: 0.02
   dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
@@ -211,29 +211,29 @@ task:
     shape_meta:
       action:
         shape:
-        - 10
+          - 10
       obs:
         agentview_image:
           shape:
-          - 3
-          - 84
-          - 84
+            - 3
+            - 84
+            - 84
           type: rgb
         robot0_eef_pos:
           shape:
-          - 3
+            - 3
         robot0_eef_quat:
           shape:
-          - 4
+            - 4
         robot0_eye_in_hand_image:
           shape:
-          - 3
-          - 84
-          - 84
+            - 3
+            - 84
+            - 84
           type: rgb
         robot0_gripper_qpos:
           shape:
-          - 2
+            - 2
     test_start_seed: 100000
     tqdm_interval_sec: 1.0
     train_start_idx: 0
@@ -241,33 +241,33 @@ task:
   shape_meta:
     action:
       shape:
-      - 10
+        - 10
     obs:
       agentview_image:
         shape:
-        - 3
-        - 84
-        - 84
+          - 3
+          - 84
+          - 84
         type: rgb
       robot0_eef_pos:
         shape:
-        - 3
+          - 3
       robot0_eef_quat:
         shape:
-        - 4
+          - 4
       robot0_eye_in_hand_image:
         shape:
-        - 3
-        - 84
-        - 84
+          - 3
+          - 84
+          - 84
         type: rgb
       robot0_gripper_qpos:
         shape:
-        - 2
+          - 2
   task_name: square
 task_name: square_image
 training:
-  checkpoint_every: 1
+  checkpoint_every: 10
   debug: false
   device: cuda:0
   gradient_accumulate_every: 1
@@ -277,7 +277,7 @@ training:
   max_val_steps: null
   num_epochs: 500
   resume: true
-  rollout_every: 1
+  rollout_every: 10
   sample_every: 5
   seed: 42
   tqdm_interval_sec: 1.0

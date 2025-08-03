@@ -96,20 +96,29 @@ def _convert_h5_to_embeddings(
                 # [print(f"{key}: {batch[key].shape}") for key in obs_keys]
 
                 # Generate embeddings
-                agent_view_vide = batch["agentview_image"]  # .permute(0, 1, 3, 4, 2)
-                # x_pt = pt_video_transform(agent_view_vide).cuda().unsqueeze(0)
-                x_pt = torch.stack([pt_video_transform(video).to(device) for video in agent_view_vide], dim=0)
-                agent_view_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]  # [batch 200 1024]
+                feats = []
+                for k in batch:
+                    if "image" in k:
+                        agent_view_vide = batch[k]  # .permute(0, 1, 3, 4, 2)
+                        # x_pt = pt_video_transform(agent_view_vide).cuda().unsqueeze(0)
+                        x_pt = torch.stack([pt_video_transform(video).to(device) for video in agent_view_vide], dim=0)
+                        agent_view_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]  # [batch 200 1024]
 
-                robot0_eye_in_hand_image = batch["robot0_eye_in_hand_image"]  # .permute(0, 1, 3, 4, 2)
-                # x_pt = pt_video_transform(robot0_eye_in_hand_image).cuda().unsqueeze(0)
-                x_pt = torch.stack([pt_video_transform(video).to(device) for video in robot0_eye_in_hand_image], dim=0)
-                robot0_eye_in_hand_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]
+                        feats.append(agent_view_embeddings)
+                    else:
+                        feats.append(batch[k].reshape(batch[k].shape[0], -1).cpu().numpy())
 
-                embeddings = np.concatenate([agent_view_embeddings, robot0_eye_in_hand_embeddings], axis=1)
+                    # robot0_eye_in_hand_image = batch["robot0_eye_in_hand_image"]  # .permute(0, 1, 3, 4, 2)
+                    # # x_pt = pt_video_transform(robot0_eye_in_hand_image).cuda().unsqueeze(0)
+                    # x_pt = torch.stack(
+                    #     [pt_video_transform(video).to(device) for video in robot0_eye_in_hand_image], dim=0
+                    # )
+                    # robot0_eye_in_hand_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]
+
+                    # embeddings = np.concatenate([agent_view_embeddings, robot0_eye_in_hand_embeddings], axis=1)
                 # embeddings = agen
-
                 # Save embeddings back into the HDF5 file
+                embeddings = np.concatenate(feats, axis=1)
                 batch_start = batch_idx * batch_size
                 batch_end = batch_start + len(batch[obs_keys[0]])
 
@@ -151,21 +160,21 @@ class HDF5Dataset(Dataset):
         demo = self.h5_file[f"data/demo_{demo_idx}"]
         obs = {}
         for key in self.obs_keys:
-            if "type" not in self.obs_dict[key] or self.obs_dict[key]["type"] != "rgb":
-                obs[key] = np.expand_dims(demo["obs"][key][timestep], axis=0)
-            else:
-                # For RGB images, we need to handle the shape and normalization
-                img = demo["obs"][key][timestep]
-                video_sequence = np.zeros(shape=(self.n_frames, *img.shape), dtype=img.dtype)
-                if img.ndim == 3:
-                    start_time = max(0, timestep + 1 - self.n_frames)
-                    pad_len = self.n_frames - (timestep + 1 - start_time)
-                    video_sequence[pad_len - self.n_frames :] = demo["obs"][key][start_time : timestep + 1]
-                    # obs[key] = np.expand_dims(video_sequence, axis=0)  # Add batch dimension
-                    obs[key] = video_sequence
-                else:
-                    # obs[key] = np.expand_dims(img, axis=0)  # Add batch dimension
-                    obs[key] = img
+            # if "type" not in self.obs_dict[key]:
+            #     obs[key] = np.expand_dims(demo["obs"][key][timestep], axis=0)
+            # else:
+            # For RGB images, we need to handle the shape and normalization
+            this_data = demo["obs"][key][timestep]
+            data_sequence = np.zeros(shape=(self.n_frames, *this_data.shape), dtype=this_data.dtype)
+            # if this_data.ndim == 3:
+            start_time = max(0, timestep + 1 - self.n_frames)
+            pad_len = self.n_frames - (timestep + 1 - start_time)
+            data_sequence[pad_len - self.n_frames :] = demo["obs"][key][start_time : timestep + 1]
+            # obs[key] = np.expand_dims(video_sequence, axis=0)  # Add batch dimension
+            obs[key] = data_sequence
+            # else:
+            #     # obs[key] = np.expand_dims(img, axis=0)  # Add batch dimension
+            #     obs[key] = this_data
 
         # Normalize RGB keys
         for key in self.obs_keys:

@@ -423,10 +423,12 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
             else:
                 # this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
                 this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...])
-                nobs_features = self._process_obs_to_feat(this_nobs)
+                nobs_features = self._process_obs_to_feat(this_nobs)  # .unsqueeze(1)  # (B, 1, Do)
                 # nobs_features = self.obs_encoder(this_nobs)
                 # reshape back to B, To, Do
-                cond = nobs_features.reshape(B, To, -1)
+                # cond = nobs_features.repeat(1, self.n_obs_steps, 1)  # (B, To, Do)
+                # cond = nobs_features.reshape(B, To, -1)
+                cond = nobs_features
             shape = (B, T, Da)
             if self.pred_action_steps_only:
                 shape = (B, self.n_action_steps, Da)
@@ -496,7 +498,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         if self.obs_as_cond:
             # reshape B, T, ... to B*T
             if self.use_embed_if_present and "embedding" in batch["obs"]:
-                cond = batch["obs"]["embedding"]
+                cond = batch["obs"]["embedding"][:, -1]  # .reshape(batch_size, To, -1)
             else:
                 this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
                 nobs_features = self.obs_encoder(this_nobs)
