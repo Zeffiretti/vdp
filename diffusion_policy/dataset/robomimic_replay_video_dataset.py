@@ -258,7 +258,7 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
             subsampled = data[key]
             past_data = subsampled[: self.n_obs_steps * self.subsample_frames]
             if self.subsampling_method == "uniform":
-                past_data = past_data[self.subsample_frames - 1 :: self.subsample_frames]
+                past_data = past_data[self.subsample_frames - 1 :: self.subsample_frames][-1]
             elif self.subsampling_method == "mixed":
                 sparse = past_data[self.subsample_frames - 1 :: self.subsample_frames][-floor(self.n_obs_steps / 2) :]
                 dense = past_data[-self.subsample_frames :][-ceil(self.n_obs_steps / 2) :]
@@ -268,12 +268,11 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
 
             # past_data = past_data[self.subsample_frames-1::self.subsample_frames]
             comb_data = past_data
-            comb_data = np.moveaxis(comb_data, 0, 1)  # T,C,H,W
-            key_data = np.stack(
-                [torch.from_numpy(np.moveaxis(frame[T_slice], -1, 1).type(torch.uint8)) for frame in comb_data]
-            )
-            obs_dict[key] = np.moveaxis(key_data, 0, 1)
-            # T,C,H,W
+            comb_data = np.moveaxis(comb_data, -1, 1)  # T,C,H,W
+            key_data = np.stack([torch.from_numpy(frame[T_slice]).type(torch.uint8) for frame in comb_data])
+            # obs_dict[key] = np.moveaxis(key_data, 0, 1)
+            obs_dict[key] = key_data
+            # should be [T,C,H,W]
             del data[key]
         for key in lowdim_keys:
             subsampled = data[key]
@@ -421,6 +420,7 @@ def _convert_robomimic_to_replay(
                     # temp = np.zeros((n_frames, *hdf5_arr.shape[1:]), dtype=hdf5_arr.dtype)
                     # temp[pad_len:] = hdf5_arr[0 : hdf5_idx + 1]
                     zarr_arr[zarr_idx, pad_len:] = hdf5_arr[0 : hdf5_idx + 1]
+                    zarr_arr[zarr_idx, :pad_len] = np.expand_dims(hdf5_arr[0], 0).repeat(pad_len, axis=0)
 
                 _ = zarr_arr[zarr_idx]  # 确保写入无误
                 return True

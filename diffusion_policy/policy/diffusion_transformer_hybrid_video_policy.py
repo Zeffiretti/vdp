@@ -571,7 +571,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
             # x = x.reshape(-1, self.num) (batch, chanel, length, width, height)
             # x = x.permute(0, 2, 1, 3, 4)  # (batch, length, chanel, width, height)
             x_pt = torch.stack([self.pt_video_transform(video).to(self.device) for video in x], dim=0)
-            x = self.obs_encoder(x_pt)[:, 0]
+            x = self.obs_encoder(x_pt).mean(dim=1)
 
             # flatten to [B, D]
             # x = x.reshape(x.shape[0], -1)

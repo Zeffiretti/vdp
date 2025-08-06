@@ -66,6 +66,7 @@ def build_pt_video_transform(img_size):
 def _convert_h5_to_embeddings(
     dataset_path,
     policy,
+    model,
     shape_dict,
     pt_video_transform,
     embedding_key="embedding",
@@ -92,6 +93,14 @@ def _convert_h5_to_embeddings(
                     print(f"Failed to delete existing embedding in demo_{demo_idx}: {e}")
                 except Exception as e:
                     print(f"Unexpected error while deleting embedding in demo_{demo_idx}: {e}")
+            if "lowdim_embedding" in demo_group["obs"]:
+                try:
+                    print(f"Deleting existing lowdim embeddings in demo_{demo_idx}")
+                    demo_group["obs"].pop("lowdim_embedding")  # Safe deletion
+                except KeyError as e:
+                    print(f"Failed to delete existing lowdim embedding in demo_{demo_idx}: {e}")
+                except Exception as e:
+                    print(f"Unexpected error while deleting lowdim embedding in demo_{demo_idx}: {e}")
             for key in seperated_embedding_keys:
                 if f"{embedding_key}_{key}" in demo_group["obs"]:
                     try:
@@ -117,14 +126,25 @@ def _convert_h5_to_embeddings(
                 # Generate embeddings
                 video_feats = []
                 lowdim_feats = []
+                nobs = policy.normalizer.normalize(batch)
+                value = next(iter(nobs.values()))
+                B, To = value.shape[:2]
+                print(B, To, value.shape)
+
+                # build input
+                device = policy.device
+                dtype = policy.dtype
+
+                # handle different ways of passing observation
+                this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
 
                 for k in video_data_keys:
                     video_data = batch[k]
                     x_pt = torch.stack([pt_video_transform(video).to(device) for video in video_data], dim=0)
-                    video_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]
+                    video_embeddings = model(x_pt).mean(dim=1).cpu().numpy().squeeze()
                     video_feats.append(video_embeddings)
                 for k in lowdim_keys:
-                    lowdim_data = batch[k].cpu().numpy()
+                    lowdim_data = this_nobs[k].cpu().numpy().reshape(batch[k].shape)
                     lowdim_feats.append(lowdim_data)
 
                 # Save embeddings back into the HDF5 file
@@ -140,7 +160,12 @@ def _convert_h5_to_embeddings(
                         shape = (demo_group["obs"][obs_keys[0]].shape[0],) + video_embeddings.shape[1:]
                         print(f"demo shape: {shape}")
                         demo_group["obs"].create_dataset(embedding_key, shape=shape, dtype=video_embeddings.dtype)
+                        lowdim_shape = (demo_group["obs"][obs_keys[0]].shape[0],) + lowdim_embeddings.shape[1:]
+                        demo_group["obs"].create_dataset(
+                            "lowdim_embedding", shape=lowdim_shape, dtype=lowdim_embeddings.dtype
+                        )
                     demo_group["obs"][embedding_key][timestep] = video_embeddings[i]
+                    demo_group["obs"]["lowdim_embedding"][timestep] = lowdim_embeddings[i]
 
     print("Embeddings generated and saved successfully!")
     return
@@ -209,9 +234,9 @@ def main(checkpoint, vjepa2, output_dir, convert_file, device):
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     img_size = 84  # Assuming img_size is defined somewhere, adjust as needed
-    policy = vit_large_rope(img_size=(img_size, img_size), num_frames=16)
-    policy.cuda().eval()
-    load_pretrained_vjepa_pt_weights(policy, vjepa2)
+    model = vit_large_rope(img_size=(img_size, img_size), num_frames=16)
+    model.cuda().eval()
+    load_pretrained_vjepa_pt_weights(model, vjepa2)
 
     pt_video_transform = build_pt_video_transform(img_size=img_size)
 
@@ -222,10 +247,10 @@ def main(checkpoint, vjepa2, output_dir, convert_file, device):
     cls = hydra.utils.get_class(cfg._target_)
     workspace = cls(cfg, output_dir=output_dir)
     workspace: BaseWorkspace
-    # workspace.load_payload(payload, exclude_keys=None, include_keys=None)
+    workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
     # get policy from workspace
-    # policy = workspace.model
+    policy = workspace.model
 
     # # configure dataset
     dataset: BaseVideoDataset
@@ -233,22 +258,25 @@ def main(checkpoint, vjepa2, output_dir, convert_file, device):
     cfg.task.dataset.use_cache = False
     cfg.shape_meta.obs["agentview_image"]["shape"] = [16, 3, img_size, img_size]
     cfg.shape_meta.obs["robot0_eye_in_hand_image"]["shape"] = [16, 3, img_size, img_size]
+    cfg.task.dataset.n_obs_steps = 16
     dataset = hydra.utils.instantiate(cfg.task.dataset)
     assert isinstance(dataset, BaseVideoDataset)
     train_dataloader = DataLoader(dataset, **cfg.dataloader)
     normalizer = dataset.get_normalizer()
 
-    # policy.set_normalizer(normalizer)
+    policy.set_normalizer(normalizer)
+    dataset.__getitem__(0)
     device = torch.device(device)
     # policy.to(device)
 
-    policy.eval()
+    policy.cuda().eval()
 
     print(f"Keys: {cfg['shape_meta']['obs']}")
     print(f"Using dataset: {cfg.task.dataset.dataset_path} to convert dataset {convert_file}")
     _convert_h5_to_embeddings(
         convert_file,
         policy,
+        model,
         cfg.shape_meta.obs,
         pt_video_transform=pt_video_transform,
         batch_size=64,

@@ -43,6 +43,7 @@ def _convert_h5_to_embeddings(dataset_path, policy, shape_dict, embedding_key="e
                     print(f"Unexpected error while deleting embedding in demo_{demo_idx}: {e}")
 
         # Prepare PyTorch dataset and dataloader
+        demo_keys.sort()
         dataset = HDF5Dataset(h5_file, demo_keys, shape_dict)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         obs_keys = list(shape_dict.keys())
@@ -128,14 +129,14 @@ def main(checkpoint, output_dir, convert_file, device):
     policy = workspace.model
 
     # configure dataset
-    # dataset: BaseImageDataset
-    # cfg.task.dataset.use_cache = False
-    # dataset = hydra.utils.instantiate(cfg.task.dataset)
-    # assert isinstance(dataset, BaseImageDataset)
-    # train_dataloader = DataLoader(dataset, **cfg.dataloader)
-    # normalizer = dataset.get_normalizer()
+    dataset: BaseImageDataset
+    cfg.task.dataset.use_cache = False
+    dataset = hydra.utils.instantiate(cfg.task.dataset)
+    assert isinstance(dataset, BaseImageDataset)
+    train_dataloader = DataLoader(dataset, **cfg.dataloader)
+    normalizer = dataset.get_normalizer()
 
-    # policy.set_normalizer(normalizer)
+    policy.set_normalizer(normalizer)
     device = torch.device(device)
     policy.to(device)
     policy.eval()
