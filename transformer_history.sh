@@ -77,6 +77,10 @@ case $config_choice in
 	CONFIG="transformer_longhist_past"
 	CONFIG_DIR="experiment_configs/longhist"
 	;;
+  video)
+	CONFIG="transformer_vide"
+	CONFIG_DIR="experiment_configs/video"
+	;;
   real)
 	CONFIG="transformer_real"
 	CONFIG_DIR="experiment_configs/real"

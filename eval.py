@@ -9,6 +9,8 @@ import sys
 sys.stdout = open(sys.stdout.fileno(), mode="w", buffering=1)
 sys.stderr = open(sys.stderr.fileno(), mode="w", buffering=1)
 
+import swanlab
+
 import os
 import pathlib
 import click
@@ -43,6 +45,16 @@ def main(checkpoint, output_dir, force_perturbs, device, num_samples):
     workspace = cls(cfg, output_dir=output_dir)
     workspace: BaseWorkspace
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
+
+    if not wandb.run:
+        # initialize wandb if not already done
+        wandb.init(
+            project="eval",
+            entity="aaa",
+            name="eval_" + os.path.basename(output_dir),
+            config=OmegaConf.to_container(cfg, resolve=True),
+            dir=output_dir,
+        )
 
     # get policy from workspace
     policy = workspace.model

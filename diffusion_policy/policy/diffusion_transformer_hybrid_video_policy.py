@@ -10,7 +10,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
-from diffusion_policy.model.diffusion.transformer_for_diffusion import TransformerForDiffusion
+from diffusion_policy.model.diffusion.video_transformer_for_diffusion import VideoTransformerForDiffusion
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.common.robomimic_config_util import get_robomimic_config
 from robomimic.algo import algo_factory
@@ -177,57 +177,24 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         # init global state
         ObsUtils.initialize_obs_utils_with_config(config)
 
-        # load model
-        # policy: PolicyAlgo = algo_factory(
-        #     algo_name=config.algo_name,
-        #     config=config,
-        #     obs_key_shapes=obs_key_shapes,
-        #     ac_dim=action_dim,
-        #     device="cpu",
-        # )
-
-        # todo(@hiesh): replace obs_encoder with vjepa2 encoder
-        # obs_encoder = policy.nets["policy"].nets["encoder"].nets["obs"]
-
-        # if obs_encoder_group_norm:
-        #     # replace batch norm with group norm
-        #     replace_submodules(
-        #         root_module=obs_encoder,
-        #         predicate=lambda x: isinstance(x, nn.BatchNorm2d),
-        #         func=lambda x: nn.GroupNorm(num_groups=x.num_features // 16, num_channels=x.num_features),
-        #     )
-        #     # obs_encoder.obs_nets['agentview_image'].nets[0].nets
-
-        # # obs_encoder.obs_randomizers['agentview_image']
-        # if eval_fixed_crop:
-        #     replace_submodules(
-        #         root_module=obs_encoder,
-        #         predicate=lambda x: isinstance(x, rmbn.CropRandomizer),
-        #         func=lambda x: dmvc.CropRandomizer(
-        #             input_shape=x.input_shape,
-        #             crop_height=x.crop_height,
-        #             crop_width=x.crop_width,
-        #             num_crops=x.num_crops,
-        #             pos_enc=x.pos_enc,
-        #         ),
-        #     )
-
-        obs_encoder = vit_large_rope(img_size=(84, 84), num_frames=16)
-        load_pretrained_vjepa_pt_weights(obs_encoder, "vjepa2_models/vitl.pt")
+        video_encoder = vit_large_rope(img_size=(84, 84), num_frames=16)
+        load_pretrained_vjepa_pt_weights(video_encoder, "vjepa2_models/vitl.pt")
         self.pt_video_transform = build_pt_video_transform(img_size=84)
 
         # create diffusion model
-        obs_feature_dim = 2 * obs_encoder.embed_dim + 9 * 16  # obs_encoder.output_shape()[0]
+        obs_feature_dim = 2 * video_encoder.embed_dim  # obs_encoder.output_shape()[0]
         input_dim = action_dim if obs_as_cond else (obs_feature_dim + action_dim)
         output_dim = input_dim
         cond_dim = obs_feature_dim if obs_as_cond else 0
 
-        model = TransformerForDiffusion(
+        model = VideoTransformerForDiffusion(
             input_dim=input_dim,
             output_dim=output_dim,
             horizon=horizon,
+            cond_dim_video_encoded=obs_feature_dim,
+            cond_dim_traj=9,
+            cond_time_steps=16,
             n_obs_steps=n_obs_steps,
-            cond_dim=cond_dim,
             n_layer=n_layer,
             n_head=n_head,
             n_emb=n_emb,
@@ -235,11 +202,10 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
             p_drop_attn=p_drop_attn,
             causal_attn=causal_attn,
             time_as_cond=time_as_cond,
-            obs_as_cond=obs_as_cond,
             n_cond_layers=n_cond_layers,
         )
 
-        self.obs_encoder = obs_encoder
+        self.obs_encoder = video_encoder
         self.model = model
         self.noise_scheduler = noise_scheduler
         self.mask_generator = LowdimMaskGenerator(
@@ -259,17 +225,8 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         self.pred_action_steps_only = pred_action_steps_only
         self.kwargs = kwargs
 
-        # if obs_encoder_dir:
-        #     print(f"loading encoder from {obs_encoder_dir}")
-        #     # obs_encoder_path = pathlib.Path(obs_encoder_dir)
-
-        #     payload = torch.load(open(obs_encoder_dir, "rb"), pickle_module=dill)
-        #     payload["state_dicts"]["obs_encoder"] = {}
-        #     for key, value in payload["state_dicts"]["model"].items():
-        #         if key.startswith("obs_encoder"):
-        #             # split keys
-        #             payload["state_dicts"]["obs_encoder"][key[len("obs_encoder.") :]] = value
-        #     self.obs_encoder.load_state_dict(payload["state_dicts"]["obs_encoder"], **kwargs)
+        self.lowdim_keys = ["robot0_eef_pos", "robot0_eef_quat", "robot0_gripper_qpos"]
+        self.video_data_keys = ["agentview_image", "robot0_eye_in_hand_image"]
 
         if obs_encoder_freeze:
             print("freezing encoder")
@@ -285,7 +242,8 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         self,
         condition_data,
         condition_mask,
-        cond=None,
+        video_cond=None,
+        traj_cond=None,
         generator=None,
         act=None,
         # keyword arguments to scheduler.step
@@ -308,7 +266,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
                 trajectory[:, : act.shape[1]] = act
 
             # 2. predict model output
-            model_output = model(trajectory, t, cond)
+            model_output = model(trajectory, t, video_cond, traj_cond)
 
             # 3. compute previous image: x_t -> x_t-1
             trajectory = scheduler.step(model_output, t, trajectory, generator=generator, **kwargs).prev_sample
@@ -326,6 +284,9 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         assert "past_action" not in obs_dict  # not implemented yet
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
+        for k in self.video_data_keys:
+            if k in obs_dict.keys():
+                nobs[k] = obs_dict[k]  # keep original video data
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
         print(B, To, value.shape)
@@ -350,6 +311,9 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         assert "past_action" not in obs_dict  # not implemented yet
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
+        for k in self.video_data_keys:
+            if k in obs_dict.keys():
+                nobs[k] = obs_dict[k]  # keep original video data
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
         print(B, To, value.shape)
@@ -400,6 +364,9 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         assert "past_action" not in obs_dict  # not implemented yet
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
+        for k in self.video_data_keys:
+            if k in obs_dict.keys():
+                nobs[k] = obs_dict[k]  # keep original video data
         if "embedding" in obs_dict:
             nobs["embedding"] = obs_dict["embedding"]
         value = next(iter(nobs.values()))
@@ -414,12 +381,13 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         dtype = self.dtype
 
         # handle different ways of passing observation
-        cond = None
+        video_cond = None
+        traj_cond = []
         cond_data = None
         cond_mask = None
         if self.obs_as_cond:
             if self.use_embed_if_present and "embedding" in obs_dict:
-                cond = obs_dict["embedding"]
+                video_cond = obs_dict["embedding"]
             else:
                 # this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
                 this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...])
@@ -428,7 +396,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
                 # reshape back to B, To, Do
                 # cond = nobs_features.repeat(1, self.n_obs_steps, 1)  # (B, To, Do)
                 # cond = nobs_features.reshape(B, To, -1)
-                cond = nobs_features
+                video_cond = nobs_features
             shape = (B, T, Da)
             if self.pred_action_steps_only:
                 shape = (B, self.n_action_steps, Da)
@@ -449,8 +417,14 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         if act_cond is not None:
             act_cond = self.normalizer["action"].normalize(act_cond)
 
+        for k in self.lowdim_keys:
+            traj_cond.append(nobs[k][:, :To, :])
+        traj_cond = torch.cat(traj_cond, dim=-1)  # (B, T, D)
+
         # run sampling
-        nsample = self.conditional_sample(cond_data, cond_mask, cond=cond, act=act_cond, **self.kwargs)
+        nsample = self.conditional_sample(
+            cond_data, cond_mask, video_cond=video_cond, traj_cond=traj_cond, act=act_cond, **self.kwargs
+        )
 
         # unnormalize prediction
         naction_pred = nsample[..., :Da]
@@ -487,23 +461,32 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         # normalize input
         assert "valid_mask" not in batch
         nobs = self.normalizer.normalize(batch["obs"])
+        # for k in self.video_data_keys:
+        #     if k in batch.keys():
+        #         nobs[k] = batch[k]  # keep original video data
         nactions = self.normalizer["action"].normalize(batch["action"])
         batch_size = nactions.shape[0]
         horizon = nactions.shape[1]
         To = self.n_obs_steps
 
         # handle different ways of passing observation
-        cond = None
+        video_cond = None
+        traj_cond = []
         trajectory = nactions
         if self.obs_as_cond:
             # reshape B, T, ... to B*T
             if self.use_embed_if_present and "embedding" in batch["obs"]:
-                cond = batch["obs"]["embedding"][:, -1]  # .reshape(batch_size, To, -1)
+                video_cond = batch["obs"]["embedding"]  # .reshape(batch_size, To, -1)
             else:
-                this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
-                nobs_features = self.obs_encoder(this_nobs)
+                # this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
+                # nobs_features = self._process_obs_to_feat(this_nobs)
+                # video_cond = nobs_features #.reshape(batch_size, To, -1)
+                video_data = {k: v for k, v in nobs.items() if k in self.video_data_keys}
+                this_nobs = dict_apply(video_data, lambda x: x[:, :To, ...])
+                nobs_features = self._process_obs_to_feat(this_nobs)  # .unsqueeze(1)  # (B, 1, Do)
+                video_cond = nobs_features
+                # nobs_features = self.obs_encoder(this_nobs)
                 # reshape back to B, T, Do
-                cond = nobs_features.reshape(batch_size, To, -1)
             if self.pred_action_steps_only:
                 start = To - 1
                 end = start + self.n_action_steps
@@ -515,6 +498,12 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
             # reshape back to B, T, Do
             nobs_features = nobs_features.reshape(batch_size, horizon, -1)
             trajectory = torch.cat([nactions, nobs_features], dim=-1).detach()
+
+        # traj_data = {k: v for k, v in nobs.items() if k in self.lowdim_keys}
+        traj_start_idx = 0
+        for k in self.lowdim_keys:
+            traj_cond.append(nobs[k][:, :To, :])
+        traj_cond = torch.cat(traj_cond, dim=-1)  # (B, T, D)
 
         # generate impainting mask
         if self.pred_action_steps_only:
@@ -540,7 +529,7 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
         noisy_trajectory[condition_mask] = trajectory[condition_mask]
 
         # Predict the noise residual
-        pred = self.model(noisy_trajectory, timesteps, cond)
+        pred = self.model(noisy_trajectory, timesteps, video_cond, traj_cond)
 
         pred_type = self.noise_scheduler.config.prediction_type
         if pred_type == "epsilon":
@@ -575,17 +564,17 @@ class DiffusionTransformerHybridVideoPolicy(BaseImagePolicy):
 
     def _process_obs_to_feat(self, obs_dict):
         feats = []
-        for k in obs_dict:
+        for k in self.video_data_keys:
             x = obs_dict[k]
 
-            if "image" in k:  # 10 16 3 84 84
-                # x = x.reshape(-1, self.num) (batch, chanel, length, width, height)
-                # x = x.permute(0, 2, 1, 3, 4)  # (batch, length, chanel, width, height)
-                x = torch.stack([self.pt_video_transform(video).to(self.device) for video in x], dim=0)
-                x = self.obs_encoder(x)[:, 0]
+            # if "image" in k:  # 10 16 3 84 84
+            # x = x.reshape(-1, self.num) (batch, chanel, length, width, height)
+            # x = x.permute(0, 2, 1, 3, 4)  # (batch, length, chanel, width, height)
+            x_pt = torch.stack([self.pt_video_transform(video).to(self.device) for video in x], dim=0)
+            x = self.obs_encoder(x_pt)[:, 0]
 
             # flatten to [B, D]
-            x = x.reshape(x.shape[0], -1)
+            # x = x.reshape(x.shape[0], -1)
             feats.append(x)
 
         return torch.cat(feats, dim=-1)

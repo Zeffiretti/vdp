@@ -286,18 +286,7 @@ class TransformerForDiffusion(ModuleAttrMixin):
             # encoder
             cond_embeddings = time_emb
             if self.obs_as_cond:
-                # If the cond shape is smaller than the input, we need to pad it
-                # cond shape : [b, t, n_cond]
-                if cond.shape[-1] < self.cond_obs_emb.in_features:
-                    cond = torch.nn.functional.pad(
-                        cond, (0, self.cond_obs_emb.in_features - cond.shape[-1]), mode="constant", value=0.0
-                    )
-                cond_obs_emb: torch.Tensor = self.cond_obs_emb(cond)  # .unsqueeze(1)
-                if cond_obs_emb.ndim == 2:
-                    cond_obs_emb = cond_obs_emb.unsqueeze(1)
-                    cond_obs_emb = cond_obs_emb.repeat(1, self.T_cond - 1, 1)  # (B,T_cond,n_emb)
-                # else:
-                #     print("==============cond_obs_emb shape", cond_obs_emb.shape)
+                cond_obs_emb = self.cond_obs_emb(cond)
                 # (B,To,n_emb)
                 cond_embeddings = torch.cat([cond_embeddings, cond_obs_emb], dim=1)
             tc = cond_embeddings.shape[1]

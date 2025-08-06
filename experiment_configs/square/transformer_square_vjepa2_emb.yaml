@@ -1,4 +1,4 @@
-_target_: diffusion_policy.workspace.train_diffusion_transformer_hybrid_workspace.TrainDiffusionTransformerHybridWorkspace
+_target_: diffusion_policy.workspace.train_diffusion_transformer_video_workspace.TrainDiffusionTransformerVideoWorkspace
 # SECTION APPLICABLE for all transformers
 obs_encoder_dir: obs_encoders/square_encoder.ckpt
 obs_encoder_freeze: true
@@ -17,7 +17,7 @@ checkpoint:
     mode: max
     monitor_key: test_mean_score
 dataloader:
-  batch_size: 64
+  batch_size: 128
   num_workers: 8
   persistent_workers: false
   pin_memory: true
@@ -39,7 +39,7 @@ logging:
   mode: online
   name: ptp_square
   project: diffusion_pickandplace_real
-  resume: true
+  resume: false
   tags:
     - train_diffusion_transformer_hybrid
     - square_video
@@ -152,7 +152,7 @@ task:
     _target_: diffusion_policy.dataset.robomimic_replay_video_dataset.RobomimicReplayVideoDataset
     abs_action: true
     use_embed_if_present: true
-    dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+    dataset_path: data/robomimic/datasets/square_vjepa2/mh/image_abs.hdf5
     horizon: ${global_horizon}
     n_obs_steps: ${global_obs}
     pad_after: 7
@@ -166,7 +166,7 @@ task:
       obs:
         embedding:
           shape:
-            - 2192
+            - 2048
         agentview_image:
           shape:
             - 3
@@ -190,19 +190,19 @@ task:
             - 2
     use_cache: true
     val_ratio: 0.02
-  dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+  dataset_path: data/robomimic/datasets/square_vjepa2/mh/image_abs.hdf5
   dataset_type: mh
   env_runner:
-    _target_: diffusion_policy.env_runner.robomimic_image_runner.RobomimicImageRunner
+    _target_: diffusion_policy.env_runner.robomimic_video_runner.RobomimicVideoRunner
     abs_action: true
     crf: 22
-    dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+    dataset_path: data/robomimic/datasets/square_vjepa2/mh/image_abs.hdf5
     fps: 10
     max_steps: 500
     n_action_steps: ${global_action}
     n_envs: 28
     n_obs_steps: ${global_obs}
-    n_test: 40
+    n_test: 10
     n_test_vis: 2
     n_train: 6
     n_train_vis: 2
@@ -267,7 +267,7 @@ task:
   task_name: square
 task_name: square_image
 training:
-  checkpoint_every: 100
+  checkpoint_every: 20
   debug: false
   device: cuda:0
   gradient_accumulate_every: 1
@@ -275,9 +275,9 @@ training:
   lr_warmup_steps: 1000
   max_train_steps: null
   max_val_steps: null
-  num_epochs: 500
-  resume: true
-  rollout_every: 100
+  num_epochs: 3500
+  resume: false
+  rollout_every: 20
   sample_every: 5
   seed: 42
   tqdm_interval_sec: 1.0

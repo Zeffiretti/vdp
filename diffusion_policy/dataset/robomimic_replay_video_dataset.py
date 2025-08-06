@@ -139,7 +139,7 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
 
         keys = list(replay_buffer.keys())
         if self.use_embed_if_present and "embedding" in keys:
-            keys = ["embedding", "action"]
+            keys = ["embedding", "action"] + lowdim_keys
 
         sampler = SequenceSampler(
             replay_buffer=replay_buffer,
@@ -173,7 +173,7 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
         val_set = copy.copy(self)
         keys = list(self.replay_buffer.keys())
         if self.use_embed_if_present and "embedding" in keys:
-            keys = ["embedding", "action"]
+            keys = ["embedding", "action"] + self.lowdim_keys
         val_set.sampler = SequenceSampler(
             replay_buffer=self.replay_buffer,
             sequence_length=(self.horizon - self.n_obs_steps) + self.n_obs_steps * self.subsample_frames,
@@ -249,7 +249,7 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
 
         if self.use_embed_if_present:
             rgb_keys = []
-            lowdim_keys = ["embedding"]
+            lowdim_keys = ["embedding", "robot0_eef_pos", "robot0_eef_quat", "robot0_gripper_qpos"]
 
         for key in rgb_keys:
             # move channel last to channel first
@@ -268,21 +268,9 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
 
             # past_data = past_data[self.subsample_frames-1::self.subsample_frames]
             comb_data = past_data
-            # obs_dict[key] = (
-            #     self.image_transforms(torch.from_numpy(np.moveaxis(comb_data[T_slice], -1, 1)).type(torch.uint8)).type(
-            #         torch.float32
-            #     )
-            #     / 255.0
-            # ).numpy()
             comb_data = np.moveaxis(comb_data, 0, 1)  # T,C,H,W
             key_data = np.stack(
-                [
-                    self.image_transforms(torch.from_numpy(np.moveaxis(frame[T_slice], -1, 1)).type(torch.uint8)).type(
-                        torch.float32
-                    )
-                    / 255.0
-                    for frame in comb_data
-                ]
+                [torch.from_numpy(np.moveaxis(frame[T_slice], -1, 1).type(torch.uint8)) for frame in comb_data]
             )
             obs_dict[key] = np.moveaxis(key_data, 0, 1)
             # T,C,H,W
@@ -300,7 +288,11 @@ class RobomimicReplayVideoDataset(BaseVideoDataset):
                 raise NotImplementedError
 
             comb_data = past_data
-            obs_dict[key] = comb_data[T_slice].astype(np.float32)
+            if key == "embedding":
+                # use the latest video embedding as obs
+                obs_dict[key] = comb_data[-1].astype(np.float32)
+            else:
+                obs_dict[key] = comb_data[T_slice].astype(np.float32)
             del data[key]
 
         subsampled = data["action"]

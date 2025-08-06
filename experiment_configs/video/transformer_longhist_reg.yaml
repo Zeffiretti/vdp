@@ -1,13 +1,12 @@
 _target_: diffusion_policy.workspace.train_diffusion_transformer_hybrid_workspace.TrainDiffusionTransformerHybridWorkspace
 # SECTION APPLICABLE for all transformers
-obs_encoder_dir: obs_encoders/square_encoder.ckpt
-obs_encoder_freeze: true
+obs_encoder_dir: null
+obs_encoder_freeze: false
 global_horizon: 32
-global_obs: 2
+global_obs: 16
 global_action: 1
 subsample_frames: 1
 subsampling_method: uniform
-
 checkpoint:
   save_last_ckpt: true
   save_last_snapshot: false
@@ -37,16 +36,16 @@ logging:
   group: null
   id: null
   mode: online
-  name: ptp_square
-  project: diffusion_pickandplace_real
+  name: ptp_square_long
+  project: diffusion_longhist
   resume: true
   tags:
-    - train_diffusion_transformer_hybrid
-    - square_image
-    - default
+  - train_diffusion_transformer_hybrid
+  - square_long_image
+  - default
 multi_run:
   run_dir: data/outputs/
-  wandb_name_base: train_diffusion_transformer_hybrid_square_image
+  wandb_name_base: train_diffusion_transformer_hybrid_square_long_image
 n_action_steps: ${global_action}
 n_latency_steps: 0
 n_obs_steps: ${global_obs}
@@ -54,23 +53,22 @@ name: train_diffusion_transformer_hybrid
 obs_as_cond: true
 optimizer:
   betas:
-    - 0.9
-    - 0.95
+  - 0.9
+  - 0.95
   learning_rate: 0.0001
   obs_encoder_weight_decay: 1.0e-06
   transformer_weight_decay: 0.001
 past_action_visible: false
 policy:
-  _target_: diffusion_policy.policy.diffusion_transformer_hybrid_image_policy.DiffusionTransformerHybridImagePolicy
+  _target_: diffusion_policy.policy.reg_transformer_hybrid_image_policy.RegressionTransformerHybridImagePolicy
   causal_attn: true
-  use_embed_if_present: { REMINDER TO INSERT CACHE EMBEDDINGS }
   obs_encoder_dir: ${obs_encoder_dir}
   obs_encoder_freeze: ${obs_encoder_freeze}
   past_action_pred: true
   past_steps_reg: -1
   crop_shape:
-    - 76
-    - 76
+  - 76
+  - 76
   eval_fixed_crop: true
   horizon: ${global_horizon}
   n_action_steps: ${global_action}
@@ -96,107 +94,105 @@ policy:
   shape_meta:
     action:
       shape:
-        - 10
+      - 10
     obs:
       agentview_image:
         shape:
-          - 3
-          - 84
-          - 84
+        - 3
+        - 84
+        - 84
         type: rgb
       robot0_eef_pos:
         shape:
-          - 3
+        - 3
       robot0_eef_quat:
         shape:
-          - 4
+        - 4
       robot0_eye_in_hand_image:
         shape:
-          - 3
-          - 84
-          - 84
+        - 3
+        - 84
+        - 84
         type: rgb
       robot0_gripper_qpos:
         shape:
-          - 2
+        - 2
   time_as_cond: true
 shape_meta:
   action:
     shape:
-      - 10
+    - 10
   obs:
     agentview_image:
       shape:
-        - 3
-        - 84
-        - 84
+      - 3
+      - 84
+      - 84
       type: rgb
     robot0_eef_pos:
       shape:
-        - 3
+      - 3
     robot0_eef_quat:
       shape:
-        - 4
+      - 4
     robot0_eye_in_hand_image:
       shape:
-        - 3
-        - 84
-        - 84
+      - 3
+      - 84
+      - 84
       type: rgb
     robot0_gripper_qpos:
       shape:
-        - 2
+      - 2
 task:
   abs_action: true
   dataset:
     _target_: diffusion_policy.dataset.robomimic_replay_image_dataset.RobomimicReplayImageDataset
     abs_action: true
-    use_embed_if_present: { REMINDER TO INSERT CACHE EMBEDDINGS }
-    dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+    dataset_path: data/longhistsquare100/demos.hdf5
+    subsample_frames: ${subsample_frames}
     horizon: ${global_horizon}
     n_obs_steps: ${global_obs}
-    pad_after: 7
-    pad_before: 128
+    pad_after: 16
+    pad_before: 1
     rotation_rep: rotation_6d
     seed: 42
     shape_meta:
       action:
         shape:
-          - 10
+        - 10
       obs:
-        embedding:
-          shape:
-            - 137
         agentview_image:
           shape:
-            - 3
-            - 84
-            - 84
+          - 3
+          - 84
+          - 84
           type: rgb
         robot0_eef_pos:
           shape:
-            - 3
+          - 3
         robot0_eef_quat:
           shape:
-            - 4
+          - 4
         robot0_eye_in_hand_image:
           shape:
-            - 3
-            - 84
-            - 84
+          - 3
+          - 84
+          - 84
           type: rgb
         robot0_gripper_qpos:
           shape:
-            - 2
+          - 2
     use_cache: false
     val_ratio: 0.02
-  dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+  dataset_path: data/longhistsquare100/demos.hdf5
   dataset_type: mh
   env_runner:
-    _target_: diffusion_policy.env_runner.robomimic_image_runner.RobomimicImageRunner
+    _target_: diffusion_policy.env_runner.robomimic_longhist_image_runner.RobomimicImageRunner
     abs_action: true
+    subsample_frames: ${subsample_frames}
     crf: 22
-    dataset_path: data/robomimic/datasets/square/mh/image_abs.hdf5
+    dataset_path: data/longhistsquare100/demos.hdf5
     fps: 10
     max_steps: 500
     n_action_steps: ${global_action}
@@ -211,63 +207,63 @@ task:
     shape_meta:
       action:
         shape:
-          - 10
+        - 10
       obs:
         agentview_image:
           shape:
-            - 3
-            - 84
-            - 84
+          - 3
+          - 84
+          - 84
           type: rgb
         robot0_eef_pos:
           shape:
-            - 3
+          - 3
         robot0_eef_quat:
           shape:
-            - 4
+          - 4
         robot0_eye_in_hand_image:
           shape:
-            - 3
-            - 84
-            - 84
+          - 3
+          - 84
+          - 84
           type: rgb
         robot0_gripper_qpos:
           shape:
-            - 2
+          - 2
     test_start_seed: 100000
     tqdm_interval_sec: 1.0
     train_start_idx: 0
-  name: square_image
+  name: square_long_image
   shape_meta:
     action:
       shape:
-        - 10
+      - 10
     obs:
       agentview_image:
         shape:
-          - 3
-          - 84
-          - 84
+        - 3
+        - 84
+        - 84
         type: rgb
       robot0_eef_pos:
         shape:
-          - 3
+        - 3
       robot0_eef_quat:
         shape:
-          - 4
+        - 4
       robot0_eye_in_hand_image:
         shape:
-          - 3
-          - 84
-          - 84
+        - 3
+        - 84
+        - 84
         type: rgb
       robot0_gripper_qpos:
         shape:
-          - 2
-  task_name: square
-task_name: square_image
+        - 2
+  task_name: square_long
+task_name: square_long_image
 training:
-  checkpoint_every: 100
+  checkpoint_every: 10
   debug: false
   device: cuda:0
   gradient_accumulate_every: 1
@@ -277,7 +273,7 @@ training:
   max_val_steps: null
   num_epochs: 3500
   resume: true
-  rollout_every: 100
+  rollout_every: 50
   sample_every: 5
   seed: 42
   tqdm_interval_sec: 1.0

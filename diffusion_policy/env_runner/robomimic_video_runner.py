@@ -267,6 +267,8 @@ class RobomimicVideoRunner(BaseImageRunner):
             past_action = None
             policy.reset()
 
+            # convert image data from [0, 1] (float) to [0, 255] (uint8
+
             env_name = self.env_meta["env_name"]
             pbar = tqdm.tqdm(
                 total=self.max_steps,
@@ -280,6 +282,8 @@ class RobomimicVideoRunner(BaseImageRunner):
             all_actions = []
             while not done:
                 # create obs dict
+                obs["agentview_image"] = (obs["agentview_image"] * 255).astype(np.uint8)
+                obs["robot0_eye_in_hand_image"] = (obs["robot0_eye_in_hand_image"] * 255).astype(np.uint8)
                 np_obs_dict = dict(obs)
 
                 if self.past_action and (past_action is not None):

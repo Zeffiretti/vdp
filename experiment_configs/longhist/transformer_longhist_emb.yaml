@@ -151,7 +151,7 @@ task:
     _target_: diffusion_policy.dataset.robomimic_replay_image_dataset.RobomimicReplayImageDataset
     abs_action: true
     use_embed_if_present: {REMINDER TO INSERT CACHE EMBEDDINGS}
-    dataset_path: data/longhistsquare100/demos_emb.hdf5
+    dataset_path: data/longhistsquare100/demos.hdf5
     subsample_frames: ${subsample_frames}
     subsampling_method: ${subsampling_method}
     horizon: ${global_horizon}
@@ -191,7 +191,7 @@ task:
           - 2
     use_cache: false
     val_ratio: 0.02
-  dataset_path: data/longhistsquare100/demos_emb.hdf5
+  dataset_path: data/longhistsquare100/demos.hdf5
   dataset_type: mh
   env_runner:
     _target_: diffusion_policy.env_runner.robomimic_longhist_image_runner.RobomimicImageRunner
@@ -199,7 +199,7 @@ task:
     subsample_frames: ${subsample_frames}
     subsampling_method: ${subsampling_method}
     crf: 22
-    dataset_path: data/longhistsquare100/demos_emb.hdf5
+    dataset_path: data/longhistsquare100/demos.hdf5
     fps: 10
     max_steps: 500
     n_action_steps: ${global_action}

@@ -64,9 +64,19 @@ def build_pt_video_transform(img_size):
 
 
 def _convert_h5_to_embeddings(
-    dataset_path, policy, shape_dict, pt_video_transform, embedding_key="embedding", batch_size=32, device="cpu"
+    dataset_path,
+    policy,
+    shape_dict,
+    pt_video_transform,
+    embedding_key="embedding",
+    batch_size=32,
+    device="cpu",
+    policy_dataset=None,
 ):
     # Open the HDF5 dataset
+    seperated_embedding_keys = ["video", "trajectory"]
+    video_data_keys = ["agentview_image", "robot0_eye_in_hand_image"]
+    lowdim_keys = ["robot0_eef_pos", "robot0_eef_quat", "robot0_gripper_qpos"]
     with h5py.File(dataset_path, "r+") as h5_file:
         demos = list(h5_file["data"].keys())
         demo_keys = [int(key.split("_")[1]) for key in demos]
@@ -82,6 +92,15 @@ def _convert_h5_to_embeddings(
                     print(f"Failed to delete existing embedding in demo_{demo_idx}: {e}")
                 except Exception as e:
                     print(f"Unexpected error while deleting embedding in demo_{demo_idx}: {e}")
+            for key in seperated_embedding_keys:
+                if f"{embedding_key}_{key}" in demo_group["obs"]:
+                    try:
+                        print(f"Deleting existing {key} embeddings in demo_{demo_idx}")
+                        demo_group["obs"].pop(f"{embedding_key}_{key}")  # Safe deletion
+                    except KeyError as e:
+                        print(f"Failed to delete existing {key} embedding in demo_{demo_idx}: {e}")
+                    except Exception as e:
+                        print(f"Unexpected error while deleting {key} embedding in demo_{demo_idx}: {e}")
 
         # Prepare PyTorch dataset and dataloader
         dataset = HDF5Dataset(h5_file, demo_keys, shape_dict)
@@ -96,29 +115,21 @@ def _convert_h5_to_embeddings(
                 # [print(f"{key}: {batch[key].shape}") for key in obs_keys]
 
                 # Generate embeddings
-                feats = []
-                for k in batch:
-                    if "image" in k:
-                        agent_view_vide = batch[k]  # .permute(0, 1, 3, 4, 2)
-                        # x_pt = pt_video_transform(agent_view_vide).cuda().unsqueeze(0)
-                        x_pt = torch.stack([pt_video_transform(video).to(device) for video in agent_view_vide], dim=0)
-                        agent_view_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]  # [batch 200 1024]
+                video_feats = []
+                lowdim_feats = []
 
-                        feats.append(agent_view_embeddings)
-                    else:
-                        feats.append(batch[k].reshape(batch[k].shape[0], -1).cpu().numpy())
+                for k in video_data_keys:
+                    video_data = batch[k]
+                    x_pt = torch.stack([pt_video_transform(video).to(device) for video in video_data], dim=0)
+                    video_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]
+                    video_feats.append(video_embeddings)
+                for k in lowdim_keys:
+                    lowdim_data = batch[k].cpu().numpy()
+                    lowdim_feats.append(lowdim_data)
 
-                    # robot0_eye_in_hand_image = batch["robot0_eye_in_hand_image"]  # .permute(0, 1, 3, 4, 2)
-                    # # x_pt = pt_video_transform(robot0_eye_in_hand_image).cuda().unsqueeze(0)
-                    # x_pt = torch.stack(
-                    #     [pt_video_transform(video).to(device) for video in robot0_eye_in_hand_image], dim=0
-                    # )
-                    # robot0_eye_in_hand_embeddings = policy(x_pt).cpu().numpy().squeeze()[:, 0]
-
-                    # embeddings = np.concatenate([agent_view_embeddings, robot0_eye_in_hand_embeddings], axis=1)
-                # embeddings = agen
                 # Save embeddings back into the HDF5 file
-                embeddings = np.concatenate(feats, axis=1)
+                video_embeddings = np.concatenate(video_feats, axis=1)
+                lowdim_embeddings = np.concatenate(lowdim_feats, axis=-1)
                 batch_start = batch_idx * batch_size
                 batch_end = batch_start + len(batch[obs_keys[0]])
 
@@ -126,10 +137,10 @@ def _convert_h5_to_embeddings(
                     # breakpoint()
                     demo_group = h5_file[f"data/demo_{demo_idx}"]
                     if embedding_key not in demo_group["obs"]:
-                        shape = (demo_group["obs"][obs_keys[0]].shape[0],) + embeddings.shape[1:]
+                        shape = (demo_group["obs"][obs_keys[0]].shape[0],) + video_embeddings.shape[1:]
                         print(f"demo shape: {shape}")
-                        demo_group["obs"].create_dataset(embedding_key, shape=shape, dtype=embeddings.dtype)
-                    demo_group["obs"][embedding_key][timestep] = embeddings[i]
+                        demo_group["obs"].create_dataset(embedding_key, shape=shape, dtype=video_embeddings.dtype)
+                    demo_group["obs"][embedding_key][timestep] = video_embeddings[i]
 
     print("Embeddings generated and saved successfully!")
     return
@@ -170,6 +181,9 @@ class HDF5Dataset(Dataset):
             start_time = max(0, timestep + 1 - self.n_frames)
             pad_len = self.n_frames - (timestep + 1 - start_time)
             data_sequence[pad_len - self.n_frames :] = demo["obs"][key][start_time : timestep + 1]
+            if pad_len > 0:
+                data_sequence[:pad_len] = this_data
+
             # obs[key] = np.expand_dims(video_sequence, axis=0)  # Add batch dimension
             obs[key] = data_sequence
             # else:
@@ -214,15 +228,15 @@ def main(checkpoint, vjepa2, output_dir, convert_file, device):
     # policy = workspace.model
 
     # # configure dataset
-    # dataset: BaseVideoDataset
-    # cfg.task.dataset._target_ = "diffusion_policy.dataset.robomimic_replay_video_dataset.RobomimicReplayVideoDataset"
-    # cfg.task.dataset.use_cache = False
-    # cfg.shape_meta.obs["agentview_image"]["shape"] = [16, 3, img_size, img_size]
-    # cfg.shape_meta.obs["robot0_eye_in_hand_image"]["shape"] = [16, 3, img_size, img_size]
-    # dataset = hydra.utils.instantiate(cfg.task.dataset)
-    # assert isinstance(dataset, BaseVideoDataset)
-    # train_dataloader = DataLoader(dataset, **cfg.dataloader)
-    # normalizer = dataset.get_normalizer()
+    dataset: BaseVideoDataset
+    cfg.task.dataset._target_ = "diffusion_policy.dataset.robomimic_replay_video_dataset.RobomimicReplayVideoDataset"
+    cfg.task.dataset.use_cache = False
+    cfg.shape_meta.obs["agentview_image"]["shape"] = [16, 3, img_size, img_size]
+    cfg.shape_meta.obs["robot0_eye_in_hand_image"]["shape"] = [16, 3, img_size, img_size]
+    dataset = hydra.utils.instantiate(cfg.task.dataset)
+    assert isinstance(dataset, BaseVideoDataset)
+    train_dataloader = DataLoader(dataset, **cfg.dataloader)
+    normalizer = dataset.get_normalizer()
 
     # policy.set_normalizer(normalizer)
     device = torch.device(device)
@@ -233,7 +247,13 @@ def main(checkpoint, vjepa2, output_dir, convert_file, device):
     print(f"Keys: {cfg['shape_meta']['obs']}")
     print(f"Using dataset: {cfg.task.dataset.dataset_path} to convert dataset {convert_file}")
     _convert_h5_to_embeddings(
-        convert_file, policy, cfg.shape_meta.obs, pt_video_transform=pt_video_transform, batch_size=64, device=device
+        convert_file,
+        policy,
+        cfg.shape_meta.obs,
+        pt_video_transform=pt_video_transform,
+        batch_size=64,
+        device=device,
+        policy_dataset=dataset,
     )
     print("Done converting!")
 
